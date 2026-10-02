@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drive Early Warning</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#6b6b66;--card:#fff;--bd:#e3e2dc;--ac:#2a6f6b;--warn:#c2410c;--r0:#e8efe9;--r1:#f2d9a0;--r2:#e8935a;--r3:#b91c1c}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--mut:#9a9992;--card:#1f1f1c;--bd:#33332f;--ac:#6cc2bc;--warn:#fb923c;--r0:#26332b;--r1:#6b5a22;--r2:#b5622f;--r3:#e04848}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 64px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}
+.sub{color:var(--mut);margin:0 0 16px}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.banner{background:var(--warn);color:#fff;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:13.5px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.k b{display:block;font-size:20px}.k span{color:var(--mut);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}th{color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}.cell{aspect-ratio:1;border-radius:3px;position:relative}
+.ctl{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:13.5px;margin-bottom:10px}input[type=range]{vertical-align:middle}
+select{font:inherit;padding:4px 6px;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px}.note{font-size:12.5px;color:var(--mut)}
+.leg span{display:inline-block;width:14px;height:10px;border-radius:2px;margin:0 3px 0 10px}
+@media(max-width:600px){.hide-s{display:none}}
+</style></head><body><main>
+<h1>Drive Early Warning</h1>
+<p class="sub">Predict drive failure 7–30 days out, then price the replacement policy in rupees.</p>
+<div class="banner" id="banner"></div>
+<div class="ctl">Horizon <select id="h"></select>
+ Replace cost ₹<input id="rc" type="range" min="2000" max="60000" step="1000"> <b id="rcv"></b>
+ Failure cost ₹<input id="fc" type="range" min="10000" max="300000" step="5000"> <b id="fcv"></b></div>
+<div class="kpis card" id="kpis"></div>
+<h2>Fleet map <span class="note">pod × rack, mean predicted risk on the last scored week</span></h2>
+<div class="card"><div class="grid" id="map"></div>
+<p class="note leg">Low<span style="background:var(--r0)"></span><span style="background:var(--r1)"></span><span style="background:var(--r2)"></span><span style="background:var(--r3)"></span>High (colour = share of drives in the fleet's top-2% risk; hover for numbers)</p></div>
+<h2>Risk queue <span class="note">top 25 drives to replace first</span></h2>
+<div class="card"><table id="q"></table></div>
+<h2>Model quality (temporal holdout)</h2>
+<div class="card"><table id="m"></table><p class="note" id="mnote"></p></div>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=id=>document.getElementById(id), inr=x=>(x<0?'−':'')+'₹'+Math.abs(Math.round(x)).toLocaleString('en-IN');
+$('banner').textContent=D.synthetic?'Synthetic fleet in Backblaze\'s schema. Numbers show the pipeline working, not how real drives behave. Run it on real Backblaze data to get real numbers.':'Computed on real Backblaze drive stats.';
+if(!D.synthetic)$('banner').style.background='var(--ac)';
+for(const h of Object.keys(D.metrics)){const o=document.createElement('option');o.value=h;o.textContent=h+' days';$('h').appendChild(o);}
+$('h').value='30';$('rc').value=D.costs.replace_inr;$('fc').value=D.costs.failure_inr;
+function best(m){let b=null;for(const r of m.curve){const net=r.avoided*+$('fc').value-r.repl*+$('rc').value;if(!b||net>b.net)b={...r,net};}return b;}
+function render(){
+ const m=D.metrics[$('h').value];$('rcv').textContent=inr($('rc').value);$('fcv').textContent=inr($('fc').value);
+ const b=best(m),base=m.curve[0].failing*$('fc').value,spend=b.repl*$('rc').value;
+ $('kpis').innerHTML=[[inr(b.net),'net saving, best threshold on test'],[b.avoided+' / '+b.failing,'failures avoided / failing drives'],[b.fa,'false alarms (healthy drives pulled)'],[b.avoided?inr(spend/b.avoided):'–','₹ per avoided failure'],[inr(base),'cost of doing nothing (test window)']].map(([a,l])=>`<div class="k"><b>${a}</b><span>${l}</span></div>`).join('');
+ const mx=Math.max(...D.map.map(c=>c.high),1),cols=['var(--r0)','var(--r1)','var(--r2)','var(--r3)'];
+ const cell={};D.map.forEach(c=>cell[c.pod+'_'+c.rack]=c);let g='';
+ for(let r=0;r<10;r++)for(let p=0;p<12;p++){const c=cell[p+'_'+r];const lv=!c?0:c.high===0?0:Math.min(3,1+Math.floor(c.high/(mx/3+1e-9)*0.99));
+  g+=`<div class="cell" style="background:${c?cols[lv]:'transparent'}" title="pod ${p} rack ${r}: ${c?c.drives+' drives, '+c.high+' high-risk, mean risk '+c.risk:'empty'}"></div>`;}
+ $('map').innerHTML=g;
+ $('q').innerHTML='<tr><th>Drive</th><th class="hide-s">Model</th><th>Pod/rack</th><th>Risk</th><th>SMART 5</th><th>187</th><th>197</th><th class="hide-s">198</th></tr>'+D.queue.map(r=>`<tr><td>${r.serial_number}</td><td class="hide-s">${r.model}</td><td>${r.pod}/${r.rack}</td><td>${r.risk.toFixed(3)}</td><td>${r.smart_5_raw}</td><td>${r.smart_187_raw}</td><td>${r.smart_197_raw}</td><td class="hide-s">${r.smart_198_raw}</td></tr>`).join('');
+ const f=x=>x.toFixed(3);
+ $('m').innerHTML=`<tr><th></th><th>PR-AUC</th><th>Recall</th><th>Precision</th><th>Replacements</th></tr>
+ <tr><td>Gradient boosting (ROC-AUC ${f(m.roc_auc)})</td><td>${f(m.pr_auc)}</td><td>${f(m.policy_test.recall)}</td><td>${f(m.policy_test.precision)}</td><td>${m.policy_test.replacements}</td></tr>
+ <tr><td>Rule: any of SMART 5/187/197/198 &gt; 0</td><td>${f(m.rule_baseline_pr_auc)}</td><td>${f(m.rule_policy_test.recall)}</td><td>${f(m.rule_policy_test.precision)}</td><td>${m.rule_policy_test.replacements}</td></tr>`;
+ $('mnote').textContent=`Test window: ${m.test_rows.toLocaleString()} drive-weeks, positive rate ${(m.test_positive_rate*100).toFixed(2)}%, only ${m.policy_test.failing_drives} failing drives. At the default costs the validation-chosen policy nets ${inr(m.policy_test.net_inr)} on test (bootstrap 95% interval ${inr(m.policy_net_ci95[0])} to ${inr(m.policy_net_ci95[1])}). The sliders pick the best threshold on the test set itself, so they are optimistic.`;
+}
+['h','rc','fc'].forEach(i=>$(i).oninput=render);render();
+</script></body></html>
