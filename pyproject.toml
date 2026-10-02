@@ -6,3 +6,4 @@ dependencies = ["numpy", "pandas", "scikit-learn", "duckdb", "pyarrow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
