@@ -10,7 +10,7 @@
 Notes: older quarters lack some SMART columns; this script keeps only the columns it needs and
 casts missing ones to 0. Run on >= 2 quarters so there is a future to hold out.
 """
-import argparse, tempfile, zipfile
+import argparse, shutil, tempfile, zipfile
 from pathlib import Path
 
 import duckdb
@@ -45,3 +45,4 @@ COPY (SELECT CAST(date AS DATE) AS date, serial_number, model, CAST(capacity_byt
       {where}) TO '{a.out}' (FORMAT parquet)""")
 n = con.execute(f"SELECT count(*), count(DISTINCT serial_number), sum(failure) FROM '{a.out}'").fetchone()
 print("rows, drives, failures:", n)
+shutil.rmtree(tmp, ignore_errors=True)  # the extracted CSVs are ~20 GB for two quarters
