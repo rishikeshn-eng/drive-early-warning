@@ -35,7 +35,7 @@ select{font:inherit;padding:4px 6px;background:var(--card);color:var(--fg);borde
 <script>
 const D=JSON.parse(document.getElementById('data').textContent);
 const $=id=>document.getElementById(id), inr=x=>(x<0?'−':'')+'₹'+Math.abs(Math.round(x)).toLocaleString('en-IN');
-$('banner').textContent=D.synthetic?'Synthetic fleet in Backblaze\'s schema. Numbers show the pipeline working, not how real drives behave. Run it on real Backblaze data to get real numbers.':'Computed on real Backblaze drive stats.';
+$('banner').textContent=D.synthetic?'Synthetic fleet in Backblaze\'s schema. Numbers show the pipeline working, not how real drives behave. Run it on real Backblaze data to get real numbers.':'Real Backblaze drive stats: Q4 2024 + Q1 2025, a 1-in-4 sample of drives (80,150 drives, 509 failures). Pod/rack cells are hash buckets: Backblaze publishes no physical locations.';
 if(!D.synthetic)$('banner').style.background='var(--ac)';
 for(const h of Object.keys(D.metrics)){const o=document.createElement('option');o.value=h;o.textContent=h+' days';$('h').appendChild(o);}
 $('h').value='30';$('rc').value=D.costs.replace_inr;$('fc').value=D.costs.failure_inr;

@@ -49,3 +49,11 @@ def test_bootstrap_interval_brackets_point_estimate():
     lo, hi = policy.bootstrap_net(scored, 0.6, c)
     point = policy.simulate(scored, 0.6, c)["net_inr"]
     assert lo <= point <= hi
+
+
+def test_split_fractions_and_gap_options_keep_short_datasets_usable():
+    from driveew import run
+    df = synth.generate(n_drives=500, days=200, seed=5)
+    _, te_gap, _ = run.fit_eval(df, 30, Costs(), train_frac=0.35, val_frac=0.7, val_test_gap=True)
+    _, te_nogap, _ = run.fit_eval(df, 30, Costs(), train_frac=0.35, val_frac=0.7, val_test_gap=False)
+    assert len(te_nogap) > len(te_gap) > 0
